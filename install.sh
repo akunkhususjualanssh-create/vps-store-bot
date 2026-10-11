@@ -12,6 +12,13 @@
 
 set -e
 
+# ─── Fix: kalau di-pipe (curl | bash), re-download & run dari file ───
+# Supaya read (input token) bisa jalan normal
+if [ ! -t 0 ]; then
+    curl -fsSL "https://raw.githubusercontent.com/akunkhususjualanssh-create/vps-store-bot/main/install.sh" -o /tmp/vps_install.sh
+    exec bash /tmp/vps_install.sh </dev/tty
+fi
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
