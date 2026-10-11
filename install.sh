@@ -1,23 +1,18 @@
 #!/bin/bash
-# ═══════════════════════════════════════════════════════════════
-#  GEN SSH STORE - VPS Store Bot Installer
-#  Install 1-klik: tinggal jalankan, masukin token, bot langsung jalan
+# GEN SSH STORE - VPS Store Bot Installer
 #
-#  Cara pake:
-#    bash install.sh
+# CARA INSTALL (PILIH SALAH SATU):
 #
-#  Atau install langsung dari GitHub:
-#    curl -fsSL https://raw.githubusercontent.com/akunkhususjualanssh-create/vps-store-bot/main/install.sh | bash
-# ═══════════════════════════════════════════════════════════════
+# CARA 1 (RECOMMENDED):
+#   curl -fsSL https://raw.githubusercontent.com/akunkhususjualanssh-create/vps-store-bot/main/install.sh -o install.sh && bash install.sh
+#
+# CARA 2 (token via argumen):
+#   curl -fsSL https://raw.githubusercontent.com/akunkhususjualanssh-create/vps-store-bot/main/install.sh -o install.sh && bash install.sh --token=TOKEN --owner=ID
+#
+# CARA 3 (manual):
+#   git clone https://github.com/akunkhususjualanssh-create/vps-store-bot.git && cd vps-store-bot && bash install.sh
 
 set -e
-
-# ─── Fix: kalau di-pipe (curl | bash), re-download & run dari file ───
-# Supaya read (input token) bisa jalan normal
-if [ ! -t 0 ]; then
-    curl -fsSL "https://raw.githubusercontent.com/akunkhususjualanssh-create/vps-store-bot/main/install.sh" -o /tmp/vps_install.sh
-    exec bash /tmp/vps_install.sh </dev/tty
-fi
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -27,124 +22,126 @@ NC='\033[0m'
 
 clear
 echo -e "${CYAN}"
-echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║   GEN SSH STORE - VPS Store Bot Installer                    ║"
-echo "║   Install 1-klik: masukin token, bot jalan                   ║"
-echo "╚═══════════════════════════════════════════════════════════════╝"
+echo "======================================================"
+echo "   GEN SSH STORE - VPS Store Bot Installer"
+echo "======================================================"
 echo -e "${NC}"
 
-# ─── Check root ───
 if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}Harus jalankan sebagai root!${NC}"
-    echo "Usage: sudo bash install.sh"
+    echo -e "${RED}Harus root! sudo bash install.sh${NC}"
     exit 1
 fi
 
 INSTALL_DIR="/opt/vps-store-bot"
 
-# ─── Step 1: Update system ───
-echo -e "${CYAN}[1/6] Updating system...${NC}"
-apt update -qq && apt install -y -qq python3 python3-pip python3-venv git curl 2>/dev/null
-echo -e "${GREEN}✅ System updated!${NC}"
+# Parse argumen
+ARG_TOKEN=""
+ARG_OWNER=""
+for arg in "$@"; do
+    case $arg in
+        --token=*)  ARG_TOKEN="${arg#*=}" ;;
+        --owner=*)  ARG_OWNER="${arg#*=}" ;;
+    esac
+done
 
-# ─── Step 2: Download from GitHub ───
-echo -e "${CYAN}[2/6] Downloading bot from GitHub...${NC}"
+# [1/6] Update system
+echo -e "${CYAN}[1/6] Updating system...${NC}"
+apt update -qq 2>/dev/null
+apt install -y -qq python3 python3-pip python3-venv git curl 2>/dev/null
+echo -e "${GREEN}[OK] System updated${NC}"
+
+# [2/6] Download dari GitHub
+echo -e "${CYAN}[2/6] Downloading from GitHub...${NC}"
 rm -rf /tmp/vps-store-bot
 git clone -q https://github.com/akunkhususjualanssh-create/vps-store-bot.git /tmp/vps-store-bot
-echo -e "${GREEN}✅ Downloaded!${NC}"
+echo -e "${GREEN}[OK] Downloaded${NC}"
 
-# ─── Step 3: Setup directory ───
+# [3/6] Setup directory
 echo -e "${CYAN}[3/6] Setting up directory...${NC}"
 mkdir -p $INSTALL_DIR/database $INSTALL_DIR/assets $INSTALL_DIR/logs
 cp -r /tmp/vps-store-bot/* $INSTALL_DIR/ 2>/dev/null || true
 rm -rf /tmp/vps-store-bot
-echo -e "${GREEN}✅ Directory ready: $INSTALL_DIR${NC}"
+echo -e "${GREEN}[OK] Directory: $INSTALL_DIR${NC}"
 
-# ─── Step 4: Install Python dependencies ───
+# [4/6] Install dependencies
 echo -e "${CYAN}[4/6] Installing Python dependencies...${NC}"
 cd $INSTALL_DIR
 python3 -m venv venv
 ./venv/bin/pip install -q python-telegram-bot python-dotenv 2>&1 | tail -1
-echo -e "${GREEN}✅ Dependencies installed!${NC}"
+echo -e "${GREEN}[OK] Dependencies installed${NC}"
 
-# ─── Step 5: Input bot token & owner ID ───
+# [5/6] Input token & owner ID
 echo -e "${CYAN}[5/6] Konfigurasi Bot${NC}"
-echo ""
-echo -e "${YELLOW}Silakan masukkan data bot lu:${NC}"
-echo ""
 
-# Cek apakah .env sudah ada
-if [ -f "$INSTALL_DIR/.env" ]; then
-    source $INSTALL_DIR/.env
-    DEFAULT_TOKEN="${BOT_TOKEN:-}"
-    DEFAULT_OWNER="${OWNER_ID:-}"
+if [ -n "$ARG_TOKEN" ] && [ -n "$ARG_OWNER" ]; then
+    BOT_TOKEN="$ARG_TOKEN"
+    OWNER_ID="$ARG_OWNER"
+    echo -e "${GREEN}[OK] Token & Owner dari argumen${NC}"
 else
     DEFAULT_TOKEN=""
     DEFAULT_OWNER=""
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        source "$INSTALL_DIR/.env" 2>/dev/null
+        DEFAULT_TOKEN="${BOT_TOKEN:-}"
+        DEFAULT_OWNER="${OWNER_ID:-}"
+    fi
+
+    echo ""
+    echo -e "${YELLOW}Masukkan data bot lu:${NC}"
+    echo ""
+
+    if [ -t 0 ]; then
+        READ_FD=0
+    else
+        READ_FD=/dev/tty
+    fi
+
+    if [ -n "$DEFAULT_TOKEN" ]; then
+        echo -ne "Bot Token [enter=akhir lama]: "
+    else
+        echo -ne "Bot Token: "
+    fi
+    read -r INPUT_TOKEN < "$READ_FD" 2>/dev/null || INPUT_TOKEN=""
+    BOT_TOKEN="${INPUT_TOKEN:-$DEFAULT_TOKEN}"
+
+    if [ -z "$BOT_TOKEN" ]; then
+        echo -e "${RED}Token gak boleh kosong!${NC}"
+        exit 1
+    fi
+
+    if [ -n "$DEFAULT_OWNER" ]; then
+        echo -ne "Owner ID [enter=akhir lama]: "
+    else
+        echo -ne "Owner ID: "
+    fi
+    read -r INPUT_OWNER < "$READ_FD" 2>/dev/null || INPUT_OWNER=""
+    OWNER_ID="${INPUT_OWNER:-$DEFAULT_OWNER}"
+
+    if [ -z "$OWNER_ID" ]; then
+        echo -e "${RED}Owner ID gak boleh kosong!${NC}"
+        exit 1
+    fi
 fi
 
-read -p "Bot Token: " BOT_TOKEN
-BOT_TOKEN=${BOT_TOKEN:-$DEFAULT_TOKEN}
-
-read -p "Owner ID (Telegram ID lu): " OWNER_ID
-OWNER_ID=${OWNER_ID:-$DEFAULT_OWNER}
-
-# Simpan .env
-cat > $INSTALL_DIR/.env << EOF
+cat > "$INSTALL_DIR/.env" << EOF
 BOT_TOKEN=$BOT_TOKEN
 OWNER_ID=$OWNER_ID
 DB_PATH=database/vps_store.db
 QRIS_DIR=assets
 EOF
 
-echo -e "${GREEN}✅ Konfigurasi disimpan!${NC}"
+echo -e "${GREEN}[OK] Config disimpan${NC}"
 
-# ─── Step 6: Start bot ───
+# [6/6] Start bot
 echo -e "${CYAN}[6/6] Starting bot...${NC}"
 
-# Kill bot lama kalau ada
 pkill -f "venv/bin/python bot.py" 2>/dev/null || true
 sleep 2
 
-# Test syntax
 $INSTALL_DIR/venv/bin/python -m py_compile $INSTALL_DIR/bot.py $INSTALL_DIR/config.py $INSTALL_DIR/database.py
-echo -e "${GREEN}✅ Syntax OK!${NC}"
+echo -e "${GREEN}[OK] Syntax OK${NC}"
 
-# Coba systemd, kalau gak ada fallback ke nohup
-if command -v systemctl &>/dev/null && [ -f /run/systemd/system ]; then
-    cat > /etc/systemd/system/vps-store-bot.service << EOF
-[Unit]
-Description=VPS Store Bot - GEN SSH STORE
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/venv/bin/python bot.py
-Restart=always
-RestartSec=5
-User=root
-Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    systemctl daemon-reload
-    systemctl enable vps-store-bot
-    systemctl start vps-store-bot
-    sleep 3
-    STATUS=$(systemctl is-active vps-store-bot)
-    echo -e "${GREEN}✅ Bot started via systemd (status: $STATUS)${NC}"
-else
-    # Fallback: nohup
-    cd $INSTALL_DIR
-    nohup ./venv/bin/python bot.py > logs/bot.log 2>&1 &
-    echo $! > $INSTALL_DIR/bot.pid
-    sleep 3
-    echo -e "${GREEN}✅ Bot started via nohup (PID: $(cat $INSTALL_DIR/bot.pid))${NC}"
-fi
-
-# ─── Buat helper scripts ───
+# Helper scripts
 cat > $INSTALL_DIR/start.sh << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
@@ -169,14 +166,13 @@ EOF
 cat > $INSTALL_DIR/restart.sh << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
-echo "Stopping bot..."
+echo "Stopping..."
 pkill -f "venv/bin/python bot.py" 2>/dev/null
 sleep 2
-echo "Starting bot..."
+echo "Starting..."
 nohup ./venv/bin/python bot.py > logs/bot.log 2>&1 &
 echo $! > bot.pid
 echo "Bot restarted. PID: $(cat bot.pid)"
-echo "Cek log: ./logs.sh"
 EOF
 
 cat > $INSTALL_DIR/logs.sh << 'EOF'
@@ -198,31 +194,33 @@ EOF
 
 chmod +x $INSTALL_DIR/*.sh
 
-# ─── Done ───
+# Start
+cd $INSTALL_DIR
+nohup ./venv/bin/python bot.py > logs/bot.log 2>&1 &
+echo $! > bot.pid
+sleep 4
+
+if pgrep -f "venv/bin/python bot.py" > /dev/null; then
+    echo -e "${GREEN}[OK] Bot jalan! PID: $(cat bot.pid)${NC}"
+else
+    echo -e "${RED}[!] Bot gagal start. Cek log:${NC}"
+    tail -5 logs/bot.log
+fi
+
 echo ""
-echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║   ✅ INSTALLATION COMPLETE!                                  ║${NC}"
-echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+echo -e "${GREEN}======================================================${NC}"
+echo -e "${GREEN}   INSTALL SELESAI!${NC}"
+echo -e "${GREEN}======================================================${NC}"
 echo ""
-echo -e "${CYAN}Install dir:${NC} $INSTALL_DIR"
-echo -e "${CYAN}Bot Token:${NC} ${BOT_TOKEN:0:15}..."
-echo -e "${CYAN}Owner ID:${NC} $OWNER_ID"
+echo "  Dir: $INSTALL_DIR"
+echo "  Token: ${BOT_TOKEN:0:15}..."
+echo "  Owner: $OWNER_ID"
 echo ""
 echo -e "${YELLOW}COMMANDS:${NC}"
+echo "  Start:   $INSTALL_DIR/start.sh"
+echo "  Stop:    $INSTALL_DIR/stop.sh"
+echo "  Restart: $INSTALL_DIR/restart.sh"
+echo "  Logs:    $INSTALL_DIR/logs.sh"
+echo "  Status:  $INSTALL_DIR/status.sh"
 echo ""
-echo "  Start:    $INSTALL_DIR/start.sh"
-echo "  Stop:     $INSTALL_DIR/stop.sh"
-echo "  Restart:  $INSTALL_DIR/restart.sh"
-echo "  Logs:     $INSTALL_DIR/logs.sh"
-echo "  Status:   $INSTALL_DIR/status.sh"
-echo ""
-echo -e "${YELLOW}FIX ERROR & RESTART:${NC}"
-echo ""
-echo "  Kalau bot error/crash:"
-echo "    1. Restart:  $INSTALL_DIR/restart.sh"
-echo "    2. Cek log:  $INSTALL_DIR/logs.sh"
-echo "    3. Stop:     $INSTALL_DIR/stop.sh"
-echo "    4. Start:    $INSTALL_DIR/start.sh"
-echo ""
-echo -e "${GREEN}Buka bot lu di Telegram dan ketik /start${NC}"
-echo ""
+echo -e "${GREEN}Buka bot di Telegram, ketik /start${NC}"
