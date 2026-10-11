@@ -1,0 +1,9 @@
+venv/
+database/
+assets/
+logs/
+*.pyc
+__pycache__/
+.env
+bot.pid
+*_backup.db
